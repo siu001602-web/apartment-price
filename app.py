@@ -1,177 +1,139 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 import streamlit as st
 
+# 페이지 설정
 st.set_page_config(
-    page_title="통화량(M1, M2)에 따른 아파트 가격 추세 및 예측", layout="wide"
+    page_title='통화량(M1, M2) 데이터 분석 프로그램', layout='wide'
 )
 
-st.title("📈 통화량(M1, M2) & 아파트 가격 회귀분석 및 예측 프로그램")
+st.title('📊 대한민국 통화량(M1, M2) 추세 분석 프로그램')
 st.markdown(
-    "본 프로그램은 **한국은행(ECOS) 공식 통화량 원자료**와 **아파트 가격(지수)"**"
-    " 데이터를 연동하여 분석합니다."
+    'GitHub의 `data/` 폴더에 있는 한국은행 원자료를 불러와서 시각화합니다.'
 )
 
 
-# ECOS CSV 파일 파싱 함수
-def parse_ecos_csv(uploaded_file):
-  df = pd.read_csv(uploaded_file)
-  date_cols = [c for c in df.columns if '/' in c]
-  melted = df.melt(
+# 한국은행 CSV 파일을 파싱하는 함수
+@st.cache_data
+def load_data():
+  # 파일 경로 지정
+  m1_path = 'data/M1 상품별 구성내역(평잔, 원계열)_06092354.csv'
+  m2_path = 'data/M2 상품별 구성내역(평잔, 원계열)_06092535.csv'
+
+  df_m1 = pd.read_csv(m1_path)
+  df_m2 = pd.read_csv(m2_path)
+
+  # 날짜 컬럼 추출 ('/'가 포함된 컬럼)
+  date_cols = [c for c in df_m1.columns if '/' in c]
+
+  # 데이터 가로 형태(Wide)를 세로 형태(Long)로 변환
+  m1_melted = df_m1.melt(
       id_vars=['통계표', '계정항목', '단위', '변환'],
       value_vars=date_cols,
       var_name='연월',
-      value_name='금액',
+      value_name='M1_금액',
   )
-  melted['금액'] = (
-      melted['금액'].astype(str).str.replace(',', '').str.strip().astype(float)
+  m2_melted = df_m2.melt(
+      id_vars=['통계표', '계정항목', '단위', '변환'],
+      value_vars=date_cols,
+      var_name='연월',
+      value_name='M2_금액',
   )
-  melted['연월'] = melted['연월'].str.replace(' p)', '').str.strip()
-  item_name = melted['계정항목'].iloc[0]
-  pivot_df = melted.pivot(index='연월', columns='계정항목', values='금액').reset_index()
-  return pivot_df
+
+  # 숫자 형식 변환 (콤마 제거 및 실수형 변환)
+  m1_melted['M1_금액'] = (
+      m1_melted['M1_금액']
+      .astype(str)
+      .str.replace(',', '')
+      .str.strip()
+      .astype(float)
+  )
+  m2_melted['M2_금액'] = (
+      m2_melted['M2_금액']
+      .astype(str)
+      .str.replace(',', '')
+      .str.strip()
+      .astype(float)
+  )
+
+  # 연월 정리 (' p)' 등 불필요한 문자 제거)
+  m1_melted['연월'] = m1_melted['연월'].str.replace(' p)', '').str.strip()
+  m2_melted['연월'] = m2_melted['연월'].str.replace(' p)', '').str.strip()
+
+  # M1과 M2 데이터 병합
+  merged_df = pd.merge(
+      m1_melted[['연월', 'M1_금액']], m2_melted[['연월', 'M2_금액']], on='연월'
+  )
+  return merged_df
 
 
-# 사이드바: 데이터 업로드
-st.sidebar.header("📁 데이터 파일 업로드")
-
-# 기본 제공되는 파일 경로 활용 또는 추가 업로드 가능
-m1_file = st.sidebar.file_uploader(
-    "M1 통화량 파일 업로드", type=['csv'], key='m1'
-)
-m2_file = st.sidebar.file_uploader(
-    "M2 통화량 파일 업로드", type=['csv'], key='m2'
-)
-apt_file = st.sidebar.file_uploader(
-    "아파트 가격 데이터 파일 (CSV 또는 Excel)", type=['csv', 'xlsx'], key='apt'
-)
-
-# 파일이 업로드된 경우 처리
-if m1_file and m2_file and apt_file:
-  df_m1 = parse_ecos_csv(m1_file)
-  df_m2 = parse_ecos_csv(m2_file)
-
-  if apt_file.name.endswith('.csv'):
-    df_apt = pd.read_csv(apt_file)
-  else:
-    df_apt = pd.read_excel(apt_file)
-
-  st.success('✅ 모든 데이터가 성공적으로 로드되었습니다!')
+# 데이터 로드 실행
+try:
+  df = load_data()
+  st.success('✅ M1, M2 원자료를 성공적으로 불러왔습니다!')
 
   # 데이터 미리보기
-  with st.expander('🔍 원본 데이터 확인하기'):
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-      st.write('M1 데이터 샘플', df_m1.head(3))
-    with col_b:
-      st.write('M2 데이터 샘플', df_m2.head(3))
-    with col_c:
-      st.write('아파트 가격 데이터 샘플', df_apt.head(3))
+  with st.expander('🔍 불러온 데이터 미리보기'):
+    st.dataframe(df.tail(10))  # 가장 최신 데이터 10개 표시
 
-  # 데이터 병합 (연월 기준)
-  # 주의: 아파트 가격 데이터프레임에 '연월' (예: '2020/01') 및 가격 컬럼명이 존재해야 합니다.
-  try:
-    # M1, M2 병합
-    m_merged = pd.merge(df_m1, df_m2, on='연월')
-    # 아파트 데이터와 병합 (아파트 데이터의 날짜 컬럼명과 가격 컬럼명을 맞춰야 함)
-    # 예시 코드: df_apt의 날짜 컬럼이 '연월', 가격 컬럼이 '가격' 또는 '지수'라고 가정
-    # 사용자 환경에 맞게 컬럼명을 선택할 수 있도록 UI 제공
-    st.markdown('---')
-    st.subheader('🛠️ 분석 변수 선택')
-    apt_cols = [c for c in df_apt.columns if c != '연월']
-    selected_apt_col = st.selectbox(
-        '아파트 가격(또는 지수)에 해당하는 컬럼 선택', apt_cols
+  # 기본 통계 정보
+  st.subheader('📈 통화량 요약 지표')
+  col1, col2 = st.columns(2)
+  with col1:
+    st.metric(
+        label='최신 M1 통화량 (십억원)',
+        value=f'{df["M1_금액"].iloc[-1]:,.1f}',
+        delta=f'{df["M1_금액"].iloc[-1] - df["M1_금액"].iloc[-2]:,.1f}',
     )
-    date_col_apt = st.selectbox(
-        '아파트 데이터의 연월(날짜) 컬럼 선택', df_apt.columns
+  with col2:
+    st.metric(
+        label='최신 M2 통화량 (십억원)',
+        value=f'{df["M2_금액"].iloc[-1]:,.1f}',
+        delta=f'{df["M2_금액"].iloc[-1] - df["M2_금액"].iloc[-2]:,.1f}',
     )
 
-    # 데이터 표준화 정제
-    df_apt_clean = df_apt[[date_col_apt, selected_apt_col]].copy()
-    df_apt_clean.columns = ['연월', '아파트가격']
-    df_apt_clean['연월'] = df_apt_clean['연월'].astype(str).str.strip()
+  # 시각화 그래프 그리기
+  st.subheader('📉 M1 및 M2 통화량 추이 그래프')
 
-    final_df = pd.merge(m_merged, df_apt_clean, on='연월').dropna()
+  fig, ax1 = plt.subplots(figsize=(12, 5))
 
-    # 통화량 컬럼명 확인
-    m1_col_name = [c for c in df_m1.columns if c != '연월'][0]
-    m2_col_name = [c for c in df_m2.columns if c != '연월'][0]
-
-    st.subheader('📊 통화량(M2) vs 아파트 가격 추세 그래프')
-    fig, ax1 = plt.subplots(figsize=(12, 5))
-
-    ax1.plot(
-        final_df['연월'],
-        final_df[m2_col_name],
-        color='tab:blue',
-        label=f'M2 통화량 ({m2_col_name})',
-    )
-    ax1.set_xlabel('연월')
-    ax1.set_ylabel('M2 통화량 (십억원)', color='tab:blue')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
-    ax1.set_xticks(final_df['연월'][::12])  # 1년 단위로 눈금 표시
-    plt.xticks(rotation=45)
-
-    ax2 = ax1.twinx()
-    ax2.plot(
-        final_df['연월'],
-        final_df['아파트가격'],
-        color='tab:red',
-        label='아파트 가격/지수',
-    )
-    ax2.set_ylabel('아파트 가격/지수', color='tab:red')
-    ax2.tick_params(axis='y', labelcolor='tab:red')
-
-    plt.title('연도별 통화량과 아파트 가격 추이 비교')
-    st.pyplot(fig)
-
-    # 회귀분석 수행 (예: M2 통화량을 독립변수 X, 아파트 가격을 종속변수 y로 설정)
-    st.markdown('---')
-    st.subheader('🤖 선형회귀분석(Linear Regression) 및 미래 예측')
-
-    X = final_df[[m2_col_name]].values
-    y = final_df['아파트가격'].values
-
-    model = LinearRegression()
-    model.fit(X, y)
-    r2 = model.score(X, y)
-
-    st.info(
-        f'회귀 모델 결정계수(R² Score): **{r2:.4f}** (통화량이 아파트 가격 변동을'
-        ' 설명하는 정도)'
-    )
-
-    # 미래 통화량 입력 슬라이더
-    min_m2_val = float(final_df[m2_col_name].min())
-    max_m2_val = float(final_df[m2_col_name].max()) * 1.5
-
-    future_m2 = st.slider(
-        f'미래 예상 {m2_col_name} (십억원)',
-        min_value=min_m2_val,
-        max_value=max_m2_val,
-        value=float(final_df[m2_col_name].max()),
-        step=10000.0,
-    )
-
-    predicted_apt_price = model.predict([[future_m2]])[0]
-    st.success(
-        f'🔮 예상 미래 통화량(**{future_m2:,.0f} 십억원**)일 때, 예측된 아파트'
-        f' 가격(지수)은 **{predicted_apt_price:,.2f}** 입니다.'
-    )
-
-  except Exception as e:
-    st.error(
-        f'데이터 병합 또는 분석 중 오류가 발생했습니다. 컬럼 형식을 확인해주세요.'
-        f' 상세 에러: {e}'
-    )
-
-else:
-  st.warning(
-      '⚠️ 사이드바에서 M1, M2 파일과 아파트 가격 데이터를 모두 업로드해 주세요.'
+  # M2 그래프 (좌측 축)
+  ax1.plot(
+      df['연월'],
+      df['M2_금액'],
+      color='tab:blue',
+      label='M2 통화량 (십억원)',
+      linewidth=2,
   )
-  st.markdown(
-      '**💡 팁:** 아파트 가격 데이터는 한국부동산원(R-ONE)의 [아파트 매매가격지수]'
-      ' 시계열 데이터를 엑셀로 다운로드하여 사용하시면 가장 편리합니다.'
+  ax1.set_xlabel('연월', fontsize=12)
+  ax1.set_ylabel('M2 통화량 (십억원)', color='tab:blue', fontsize=12)
+  ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+  # 1년(12개월) 단위로 X축 눈금 표시 설정
+  ax1.set_xticks(df['연월'][::12])
+  plt.xticks(rotation=45)
+
+  # M1 그래프 (우측 축)
+  ax2 = ax1.twinx()
+  ax2.plot(
+      df['연월'],
+      df['M1_금액'],
+      color='tab:orange',
+      label='M1 통화량 (십억원)',
+      linewidth=2,
+      linestyle='--',
+  )
+  ax2.set_ylabel('M1 통화량 (십억원)', color='tab:orange', fontsize=12)
+  ax2.tick_params(axis='y', labelcolor='tab:orange')
+
+  plt.title('한국은행 M1 및 M2 통화량 장기 추세 비교', fontsize=14)
+  fig.tight_layout()
+
+  st.pyplot(fig)
+
+except Exception as e:
+  st.error(
+      f'데이터를 처리하는 동안 오류가 발생했습니다. 파일 경로와 형식을'
+      f' 확인해주세요. 상세 에러: {e}'
   )
