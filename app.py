@@ -89,6 +89,10 @@ try:
   regions = apt_raw_df['지역'].unique().tolist()
   selected_region = st.sidebar.selectbox('지역 선택', regions, index=0)
 
+  # 그래프 내 깨짐 방지를 위한 지역명 영문 매핑
+  region_en_map = {'전국': 'Nationwide', '서울': 'Seoul'}
+  region_plot_name = region_en_map.get(selected_region, selected_region)
+
   region_row = apt_raw_df[apt_raw_df['지역'] == selected_region]
   apt_melted_list = []
   for col in apt_date_cols:
@@ -197,17 +201,17 @@ try:
         filtered_df['아파트매매지수'],
         color='tab:green',
         linewidth=2,
-        label=f'Apt Price Index ({selected_region})',
+        label=f'Apt Price Index ({region_plot_name})',
     )
     ax2.set_ylabel(
-        f'Apt Price Index ({selected_region})',
+        f'Apt Price Index ({region_plot_name})',
         color='tab:green',
         fontsize=12,
     )
     ax2.tick_params(axis='y', labelcolor='tab:green')
 
     plt.title(
-        f'M2 Supply & {selected_region} Apt Price Index Trend ({start_m} ~'
+        f'M2 Supply & {region_plot_name} Apt Price Index Trend ({start_m} ~'
         f' {end_m})',
         fontsize=14,
         fontweight='bold',
