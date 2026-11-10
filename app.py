@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
-# --- 폰트 깨짐 방지 기본 설정 ---
+# --- 폰트 깨짐 방지 설정 ---
 import platform
 
 if platform.system() == 'Windows':
