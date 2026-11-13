@@ -1,5 +1,4 @@
 from datetime import datetime
-import io
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -24,10 +23,10 @@ st.set_page_config(
 )
 
 st.title(
-    '📊 대한민국 통화량(M1, M2), 기준금리 및 아파트 가격 통합 분석 시스템'
+    '📊 대한민국 통화량(M1, M2)과 아파트 가격 선형회귀 분석 및 예측 시스템'
 )
 st.markdown(
-    '한국은행(ECOS) 공식 통화량 및 금리 데이터와 한국부동산원 아파트 매매가격지수를'
+    '한국은행(ECOS) 공식 통화량 데이터와 한국부동산원 아파트 매매가격지수를'
     ' 활용합니다.'
 )
 
@@ -109,28 +108,6 @@ try:
   apt_df_clean = pd.DataFrame(apt_melted_list)
   merged_df = pd.merge(money_df, apt_df_clean, on='연월', how='inner').dropna()
 
-  # [기능 3 추가] 한국은행 기준금리 가상/연동 데이터 생성 (실제 금리 파일이 없을 때 대비한 거시경제 트렌드 시뮬레이션)
-  # 한국은행 기준금리 추이를 반영한 샘플 데이터 매핑
-  np.random.seed(42)
-  # 대략적인 한국 기준금리 흐름 시뮬레이션 (2006~2026)
-  base_rates = []
-  for ym in merged_df['연월']:
-    y = int(ym.split('/')[0])
-    if y <= 2008:
-      rate = 5.0
-    elif y <= 2010:
-      rate = 3.0
-    elif y <= 2016:
-      rate = 2.0
-    elif y <= 2020:
-      rate = 1.25
-    elif y <= 2023:
-      rate = 3.5
-    else:
-      rate = 3.0
-    base_rates.append(rate)
-  merged_df['한국은행기준금리'] = base_rates
-
   # 사이드바 캘린더 날짜 선택기
   st.sidebar.subheader('📅 조회 기간 선택 (캘린더)')
 
@@ -196,7 +173,7 @@ try:
     st.markdown('---')
     st.header(
         f'🏠 PART 2: M2 통화량 vs 아파트 매매가격지수 ({selected_region})'
-        ' 회귀분석 및 미래 예측'
+        ' 회귀분석 및 예측'
     )
     st.markdown(
         '아파트 같은 중장기 실물 자산 가격은 시중에 풀린 총누적 유동성인'
@@ -243,39 +220,10 @@ try:
     fig_m2.tight_layout()
     st.pyplot(fig_m2)
 
-    # [기능 3 추가] PART 3: 한국은행 기준금리 연동 거시경제 분석
+    # 회귀분석 및 슬라이더 예측 시뮬레이션 (슬라이더 연동 산점도/회귀선 그래프 추가)
     st.markdown('---')
-    st.header('📉 PART 3: 한국은행 기준금리 추이 연동 분석')
-    st.markdown(
-        '금리 인하 ➔ 시중 유동성(M2) 확대 ➔ 아파트 가격 상승으로 이어지는 거시경제'
-        ' 흐름을 확인합니다.'
-    )
-
-    fig_rate, ax_rate = plt.subplots(figsize=(12, 4))
-    ax_rate.plot(
-        filtered_df['연월'],
-        filtered_df['한국은행기준금리'],
-        color='tab:orange',
-        linewidth=2,
-        label='Base Rate (%)',
-    )
-    ax_rate.set_title(
-        f'Bank of Korea Base Rate Trend ({start_m} ~ {end_m})',
-        fontsize=13,
-        fontweight='bold',
-    )
-    ax_rate.set_xlabel('Date (Year/Month)')
-    ax_rate.set_ylabel('Base Rate (%)', color='tab:orange')
-    ax_rate.set_xticks(filtered_df['연월'][::step_m2])
-    plt.xticks(rotation=45)
-    ax_rate.grid(True, linestyle='--', alpha=0.5)
-    ax_rate.legend(loc='upper right')
-    fig_rate.tight_layout()
-    st.pyplot(fig_rate)
-
-    # 회귀분석
     st.subheader(
-        '🤖 M2 기반 아파트 가격지수 선형회귀분석 및 예측 시뮬레이션'
+        '🤖 M2 기반 아파트 가격지수 선형회귀분석 및 실시간 예측 시뮬레이션'
     )
 
     X = filtered_df[['M2_금액']].values
@@ -302,13 +250,63 @@ try:
     )
 
     predicted_index = model.predict([[future_m2_input]])[0]
+
     st.success(
         f'✨ 예상 미래 M2 통화량(**{future_m2_input:,.0f} 십억원**)일 때, 회귀식으로'
         f' 추정되는 **{selected_region}** 아파트 예상 매매가격지수는'
         f' **{predicted_index:,.2f}** 입니다.'
     )
 
-    # [기능 4 추가] 분석 리포트 CSV 다운로드 기능
+    # [추가됨] 슬라이더 조절 시 실시간으로 움직이는 M2 vs 아파트지수 회귀 예측 산점도 그래프
+    st.markdown('#### 📈 M2 통화량 vs 아파트 가격지수 회귀 직선 및 예측 위치 시각화')
+
+    fig_reg, ax_reg = plt.subplots(figsize=(10, 5))
+    # 실제 데이터 산점도
+    ax_reg.scatter(
+        filtered_df['M2_금액'],
+        filtered_df['아파트매매지수'],
+        color='tab:blue',
+        alpha=0.6,
+        label='Historical Data',
+    )
+
+    # 회귀 직선 그리기
+    x_line = np.linspace(min_m2, max_m2, 100).reshape(-1, 1)
+    y_line = model.predict(x_line)
+    ax_reg.plot(
+        x_line,
+        y_line,
+        color='tab:red',
+        linewidth=2,
+        label='Linear Regression Fit',
+    )
+
+    # 사용자가 슬라이더로 조절한 미래 예측 지점 표시 (움직일 때마다 빨간 점이 이동함)
+    ax_reg.scatter(
+        [future_m2_input],
+        [predicted_index],
+        color='gold',
+        s=150,
+        zorder=5,
+        edgecolors='black',
+        label=f'Predicted Point ({future_m2_input:,.0f}, {predicted_index:.2f})',
+    )
+
+    ax_reg.set_xlabel('M2 Supply (Billions KRW)', fontsize=11)
+    ax_reg.set_ylabel(
+        f'Apt Price Index ({region_plot_name})', fontsize=11, color='tab:green'
+    )
+    ax_reg.set_title(
+        f'Regression Model & Interactive Prediction for {region_plot_name}',
+        fontsize=13,
+        fontweight='bold',
+    )
+    ax_reg.grid(True, linestyle='--', alpha=0.5)
+    ax_reg.legend(loc='upper left')
+    fig_reg.tight_layout()
+    st.pyplot(fig_reg)
+
+    # 분석 리포트 CSV 다운로드 기능
     st.markdown('---')
     st.subheader('📥 분석 결과 리포트 다운로드')
     st.markdown(
