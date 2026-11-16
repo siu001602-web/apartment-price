@@ -314,7 +314,7 @@ try:
     fig_ts.tight_layout()
     st.pyplot(fig_ts)
 
-    # 2. 회귀 분석 및 예측 시뮬레이션 섹션 (슬라이더 연동 실시간 그래프 추가)
+    # 2. 회귀 분석 및 예측 시뮬레이션 섹션
     st.markdown('---')
     st.subheader('🤖 M2 통화량 기반 선형회귀 및 예측 시뮬레이션')
     selected_region = st.selectbox(
@@ -352,56 +352,57 @@ try:
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
 
-    # 📊 [추가된 부분] 슬라이더 값에 따라 실시간으로 움직이는 회귀 직선 & 예측 위치 그래프
+    # 📊 [수정된 부분] X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프
     st.markdown(
-        '#### 📈 실시간 회귀 직선 및 슬라이더 예측 위치 시뮬레이션 그래프'
+        '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | 실제 매매지수 추세 & 슬라이더'
+        ' 예측값 비교'
     )
-    fig_reg, ax_reg = plt.subplots(figsize=(10, 5))
+    st.markdown(
+        '슬라이더로 입력한 M2 통화량을 회귀식에 대입했을 때 도출되는 **예상'
+        ' 아파트 가격지수(수평선)**가 시간(연도) 흐름 속에서 과거 실제 가격'
+        ' 추세와 비교해 어느 정도 수준인지 시각화합니다.'
+    )
 
-    # 과거 실제 데이터 산점도
-    ax_reg.scatter(
-        reg_df['M2_금액'],
-        y,
+    fig_sim, ax_sim = plt.subplots(figsize=(14, 5))
+
+    # X축: 날짜, Y축: 실제 해당 지역 매매가격지수 추세선
+    actual_y = pd.to_numeric(reg_df[m_col], errors='coerce').values
+    ax_sim.plot(
+        reg_df['date'],
+        actual_y,
         color='tab:blue',
-        alpha=0.6,
-        label='Historical Data',
+        linewidth=2,
+        label=f'Historical {selected_region} Sale Index',
     )
 
-    # 회귀 직선 그리기
-    x_line = np.linspace(min_m2, max_m2, 100).reshape(-1, 1)
-    y_line = model.predict(x_line)
-    ax_reg.plot(
-        x_line,
-        y_line,
-        color='tab:red',
-        linewidth=2.5,
-        label='Linear Regression Fit',
-    )
-
-    # 사용자가 슬라이더로 움직이는 지점 (실시간 노란색 마커)
-    ax_reg.scatter(
-        [future_m2],
-        [pred_val],
+    # 슬라이더 예측값을 전체 기간에 걸쳐 수평선으로 비교 표시
+    ax_sim.axhline(
+        y=pred_val,
         color='gold',
-        s=180,
-        zorder=5,
-        edgecolors='black',
-        label=f'Slider Prediction Point ({future_m2:,.0f}, {pred_val:.2f})',
+        linestyle='--',
+        linewidth=2.5,
+        label=f'Slider Predicted Index ({pred_val:.2f}) at M2 {future_m2:,.0f}',
     )
 
-    ax_reg.set_xlabel('M2 Money Supply (Billion KRW)', fontsize=11)
-    ax_reg.set_ylabel(
-        f'{selected_region} Sale Price Index', fontsize=11, color='tab:green'
-    )
-    ax_reg.set_title(
-        f'Interactive Regression & Prediction for {selected_region}',
-        fontsize=13,
+    ax_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
+    ax_sim.set_ylabel(
+        f'{selected_region} Sale Price Index',
+        fontsize=12,
         fontweight='bold',
+        color='tab:blue',
     )
-    ax_reg.grid(True, linestyle='--', alpha=0.5)
-    ax_reg.legend(loc='upper left')
-    fig_reg.tight_layout()
-    st.pyplot(fig_reg)
+    ax_sim.grid(True, linestyle='--', alpha=0.5)
+    ax_sim.legend(loc='upper left', fontsize=10)
+
+    plt.title(
+        f'Time-Series Prediction Simulation for {selected_region} (X-axis:'
+        ' Year)',
+        fontsize=14,
+        fontweight='bold',
+        pad=15,
+    )
+    fig_sim.tight_layout()
+    st.pyplot(fig_sim)
 
 except Exception as e:
   st.error(f'데이터 처리 중 오류가 발생했습니다: {e}')
