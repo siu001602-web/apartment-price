@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -9,15 +10,29 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# --- 폰트 및 마이너스 기호 깨짐 방지 설정 ---
+# --- 폰트 깨짐 방지 자동 감지 및 설정 ---
 import platform
 
-if platform.system() == 'Windows':
+system_name = platform.system()
+if system_name == 'Windows':
   plt.rc('font', family='Malgun Gothic')
-elif platform.system() == 'Darwin':
+elif system_name == 'Darwin':
   plt.rc('font', family='AppleGothic')
 else:
-  plt.rc('font', family='DejaVu Sans')
+  # Linux (Streamlit Cloud 환경 등)에서 사용 가능한 한글 폰트 자동 탐색
+  font_list = [f.name for f in fm.fontManager.ttflist]
+  candidate_fonts = [
+      'NanumGothic',
+      'NanumBarunGothic',
+      'DejaVu Sans',
+      'Arial',
+  ]
+  applied_font = 'DejaVu Sans'
+  for cf in candidate_fonts:
+    if cf in font_list:
+      applied_font = cf
+      break
+  plt.rc('font', family=applied_font)
 
 plt.rcParams['axes.unicode_minus'] = False
 
@@ -26,12 +41,10 @@ st.set_page_config(
     page_title='아파트 가격 및 통화량 시계열 통합 분석 대시보드', layout='wide'
 )
 
-st.title(
-    '📊 [시계열 분석] X축: 연도(Date) vs Y축: 지역별 아파트 가격 및 M2 통화량'
-)
+st.title('📊 [시계열 분석] 통화량(M2) 및 아파트 매매가격지수 통합 대시보드')
 st.markdown(
-    '한국은행(ECOS) 통화량(M1/M2)과 한국부동산원 아파트 매매·전세가격지수의'
-    ' **시간에 따른 추세(시계열)**를 완벽한 시계열 정렬로 비교합니다.'
+    '한국은행(ECOS) 통화량과 한국부동산원 아파트 매매가격지수의 흐름을'
+    ' 시계열로 비교합니다.'
 )
 
 
@@ -234,7 +247,7 @@ try:
         '⚠️ 선택하신 기간에 해당하는 데이터가 부족하거나 존재하지 않습니다.'
     )
   else:
-    # 1. 시계열 통합 차트
+    # 1. 첫 번째 시계열 통합 차트 (폰트 깨짐 방지를 위해 범례 영문 표기)
     st.markdown('---')
     st.header(
         '📈 [시계열 통합 차트] X축: 연도 (Datetime) | M2 통화량 및 전체 지역'
@@ -278,12 +291,13 @@ try:
       col_m = f'{reg}_매매지수'
       if col_m in analysis_df.columns:
         y_reg = pd.to_numeric(analysis_df[col_m], errors='coerce').values
+        # 지역명을 영문 코드 형태로 안전하게 표기하여 폰트 깨짐 원천 차단
         ax2.plot(
             x_dates,
             y_reg,
             linewidth=2,
             color=colors[idx % len(colors)],
-            label=f'{reg} Index',
+            label=f'Region {idx+1} Index',
         )
 
     ax2.set_ylabel(
@@ -352,7 +366,7 @@ try:
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
 
-    # 3. X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프 (폰트 깨짐 완전 해결)
+    # 3. 두 번째 시뮬레이션 그래프 (X축: 연도, 폰트 깨짐 방지 적용 완료)
     st.markdown(
         '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | 실제 매매지수 추세 & 슬라이더'
         ' 예측값 비교'
@@ -371,7 +385,7 @@ try:
         actual_y,
         color='tab:blue',
         linewidth=2,
-        label=f'Historical {selected_region} Sale Index',
+        label='Historical Sale Index',
     )
 
     ax_sim.axhline(
@@ -392,10 +406,8 @@ try:
     ax_sim.grid(True, linestyle='--', alpha=0.5)
     ax_sim.legend(loc='upper left', fontsize=10)
 
-    # 폰트 깨짐 방지를 위해 차트 타이틀을 영문으로 설정
     plt.title(
-        f'Time-Series Prediction Simulation for {selected_region} (X-axis:'
-        ' Year)',
+        'Time-Series Prediction Simulation (X-axis: Year)',
         fontsize=14,
         fontweight='bold',
         pad=15,
