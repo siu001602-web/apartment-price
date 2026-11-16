@@ -10,7 +10,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # --- 폰트 및 마이너스 기호 깨짐 방지 설정 ---
-import matplotlib.font_manager as fm
 import platform
 
 if platform.system() == 'Windows':
@@ -18,15 +17,7 @@ if platform.system() == 'Windows':
 elif platform.system() == 'Darwin':
   plt.rc('font', family='AppleGothic')
 else:
-  # Linux (Streamlit Cloud 환경) 등에서 한글 폰트가 없을 경우 영문 혹은 기본 폰트 사용으로 깨짐 방지
-  # 나눔고딕이 설치되어 있는 경우를 대비해 설정 시도
-  import subprocess
-
-  try:
-    # 시스템에 나눔고딕 설치 확인 시도
-    plt.rc('font', family='NanumGothic')
-  except:
-    plt.rc('font', family='DejaVu Sans')
+  plt.rc('font', family='DejaVu Sans')
 
 plt.rcParams['axes.unicode_minus'] = False
 
@@ -243,6 +234,7 @@ try:
         '⚠️ 선택하신 기간에 해당하는 데이터가 부족하거나 존재하지 않습니다.'
     )
   else:
+    # 1. 시계열 통합 차트
     st.markdown('---')
     st.header(
         '📈 [시계열 통합 차트] X축: 연도 (Datetime) | M2 통화량 및 전체 지역'
@@ -258,7 +250,6 @@ try:
     x_dates = analysis_df['date'].values
     y_m2 = analysis_df['M2_금액'].values
 
-    # 좌측 Y축: M2 통화량 (범례 영문 병기 또는 안정적 출력)
     ax1.plot(
         x_dates,
         y_m2,
@@ -274,7 +265,6 @@ try:
     )
     ax1.tick_params(axis='y', labelcolor='black')
 
-    # 우측 Y축: 지역별 아파트 매매지수
     ax2 = ax1.twinx()
     colors = [
         'tab:blue',
@@ -304,7 +294,6 @@ try:
     )
     ax2.tick_params(axis='y', labelcolor='tab:blue')
 
-    # 범례 통합 표시 (텍스트 깨짐 방지를 위해 영문 라벨 병행)
     lines_1, labels_1 = ax1.get_legend_handles_labels()
     lines_2, labels_2 = ax2.get_legend_handles_labels()
     ax1.legend(
@@ -325,7 +314,7 @@ try:
     fig_ts.tight_layout()
     st.pyplot(fig_ts)
 
-    # 회귀 분석 및 예측 시뮬레이션 섹션
+    # 2. 회귀 분석 및 예측 시뮬레이션 섹션 (슬라이더 연동 실시간 그래프 추가)
     st.markdown('---')
     st.subheader('🤖 M2 통화량 기반 선형회귀 및 예측 시뮬레이션')
     selected_region = st.selectbox(
@@ -362,6 +351,57 @@ try:
         f'✨ 예상 M2 통화량 **{future_m2:,.0f} 십억원**일 때, 추정되는'
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
+
+    # 📊 [추가된 부분] 슬라이더 값에 따라 실시간으로 움직이는 회귀 직선 & 예측 위치 그래프
+    st.markdown(
+        '#### 📈 실시간 회귀 직선 및 슬라이더 예측 위치 시뮬레이션 그래프'
+    )
+    fig_reg, ax_reg = plt.subplots(figsize=(10, 5))
+
+    # 과거 실제 데이터 산점도
+    ax_reg.scatter(
+        reg_df['M2_금액'],
+        y,
+        color='tab:blue',
+        alpha=0.6,
+        label='Historical Data',
+    )
+
+    # 회귀 직선 그리기
+    x_line = np.linspace(min_m2, max_m2, 100).reshape(-1, 1)
+    y_line = model.predict(x_line)
+    ax_reg.plot(
+        x_line,
+        y_line,
+        color='tab:red',
+        linewidth=2.5,
+        label='Linear Regression Fit',
+    )
+
+    # 사용자가 슬라이더로 움직이는 지점 (실시간 노란색 마커)
+    ax_reg.scatter(
+        [future_m2],
+        [pred_val],
+        color='gold',
+        s=180,
+        zorder=5,
+        edgecolors='black',
+        label=f'Slider Prediction Point ({future_m2:,.0f}, {pred_val:.2f})',
+    )
+
+    ax_reg.set_xlabel('M2 Money Supply (Billion KRW)', fontsize=11)
+    ax_reg.set_ylabel(
+        f'{selected_region} Sale Price Index', fontsize=11, color='tab:green'
+    )
+    ax_reg.set_title(
+        f'Interactive Regression & Prediction for {selected_region}',
+        fontsize=13,
+        fontweight='bold',
+    )
+    ax_reg.grid(True, linestyle='--', alpha=0.5)
+    ax_reg.legend(loc='upper left')
+    fig_reg.tight_layout()
+    st.pyplot(fig_reg)
 
 except Exception as e:
   st.error(f'데이터 처리 중 오류가 발생했습니다: {e}')
