@@ -9,7 +9,8 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# --- 폰트 깨짐 방지 설정 ---
+# --- 폰트 및 마이너스 기호 깨짐 방지 설정 ---
+import matplotlib.font_manager as fm
 import platform
 
 if platform.system() == 'Windows':
@@ -17,7 +18,15 @@ if platform.system() == 'Windows':
 elif platform.system() == 'Darwin':
   plt.rc('font', family='AppleGothic')
 else:
-  plt.rc('font', family='DejaVu Sans')
+  # Linux (Streamlit Cloud 환경) 등에서 한글 폰트가 없을 경우 영문 혹은 기본 폰트 사용으로 깨짐 방지
+  # 나눔고딕이 설치되어 있는 경우를 대비해 설정 시도
+  import subprocess
+
+  try:
+    # 시스템에 나눔고딕 설치 확인 시도
+    plt.rc('font', family='NanumGothic')
+  except:
+    plt.rc('font', family='DejaVu Sans')
 
 plt.rcParams['axes.unicode_minus'] = False
 
@@ -96,7 +105,6 @@ def load_all_data():
   else:
     apt_combined = df_m_pivot.reset_index()
 
-  # 새로 알려주신 정확한 M1, M2 파일명 적용
   m1_filename = 'M1 상품별 구성내역(평잔, 원계열)_06092354.csv'
   m2_filename = 'M2 상품별 구성내역(평잔, 원계열)_06092535.csv'
   m1_path = find_file(m1_filename)
@@ -192,7 +200,6 @@ def load_all_data():
         3000000 + i * 15000 for i in range(len(final_merged))
     ]
 
-  # 날짜순 정렬 보장
   final_merged = final_merged.sort_values('date').reset_index(drop=True)
   return final_merged
 
@@ -201,13 +208,11 @@ try:
   df_all = load_all_data()
   st.success('✅ 통화량 및 아파트 가격 데이터 로드 완료!')
 
-  # 사이드바 설정
   st.sidebar.header('⚙️ 분석 설정 및 필터')
   regions = [
       c.replace('_매매지수', '') for c in df_all.columns if '_매매지수' in c
   ]
 
-  # 조회 기간 설정
   st.sidebar.subheader('📅 조회 기간 선택')
   min_dt = df_all['date'].min().date()
   max_dt = df_all['date'].max().date()
@@ -238,7 +243,6 @@ try:
         '⚠️ 선택하신 기간에 해당하는 데이터가 부족하거나 존재하지 않습니다.'
     )
   else:
-    # TIME-SERIES CHART
     st.markdown('---')
     st.header(
         '📈 [시계열 통합 차트] X축: 연도 (Datetime) | M2 통화량 및 전체 지역'
@@ -254,19 +258,19 @@ try:
     x_dates = analysis_df['date'].values
     y_m2 = analysis_df['M2_금액'].values
 
-    # 좌측 Y축: M2 통화량
+    # 좌측 Y축: M2 통화량 (범례 영문 병기 또는 안정적 출력)
     ax1.plot(
         x_dates,
         y_m2,
         color='black',
         linewidth=2.5,
         linestyle='--',
-        label='M2 Supply (독립변수)',
+        label='M2 Money Supply',
         zorder=3,
     )
-    ax1.set_xlabel('연도 (Year)', fontsize=12, fontweight='bold')
+    ax1.set_xlabel('Year', fontsize=12, fontweight='bold')
     ax1.set_ylabel(
-        'M2 통화량 (십억원)', color='black', fontsize=12, fontweight='bold'
+        'M2 Supply (Billion KRW)', color='black', fontsize=12, fontweight='bold'
     )
     ax1.tick_params(axis='y', labelcolor='black')
 
@@ -289,18 +293,18 @@ try:
             y_reg,
             linewidth=2,
             color=colors[idx % len(colors)],
-            label=f'{reg} 매매지수',
+            label=f'{reg} Sale Index',
         )
 
     ax2.set_ylabel(
-        '아파트 매매가격지수 (종속변수)',
+        'Apt Sale Price Index',
         color='tab:blue',
         fontsize=12,
         fontweight='bold',
     )
     ax2.tick_params(axis='y', labelcolor='tab:blue')
 
-    # 범례 통합 표시
+    # 범례 통합 표시 (텍스트 깨짐 방지를 위해 영문 라벨 병행)
     lines_1, labels_1 = ax1.get_legend_handles_labels()
     lines_2, labels_2 = ax2.get_legend_handles_labels()
     ax1.legend(
