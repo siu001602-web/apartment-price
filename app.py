@@ -10,7 +10,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# --- 폰트 깨짐 방지 자동 감지 및 설정 ---
+# --- 폰트 및 마이너스 기호 깨짐 방지 설정 ---
 import platform
 
 system_name = platform.system()
@@ -19,7 +19,6 @@ if system_name == 'Windows':
 elif system_name == 'Darwin':
   plt.rc('font', family='AppleGothic')
 else:
-  # Linux (Streamlit Cloud 환경 등)에서 사용 가능한 한글 폰트 자동 탐색
   font_list = [f.name for f in fm.fontManager.ttflist]
   candidate_fonts = [
       'NanumGothic',
@@ -41,10 +40,12 @@ st.set_page_config(
     page_title='아파트 가격 및 통화량 시계열 통합 분석 대시보드', layout='wide'
 )
 
-st.title('📊 [시계열 분석] 통화량(M2) 및 아파트 매매가격지수 통합 대시보드')
+st.title(
+    '📊 [시계열 분석] X축: 연도(Date) vs Y축: 지역별 아파트 가격 및 M2 통화량'
+)
 st.markdown(
-    '한국은행(ECOS) 통화량과 한국부동산원 아파트 매매가격지수의 흐름을'
-    ' 시계열로 비교합니다.'
+    '한국은행(ECOS) 통화량(M1/M2)과 한국부동산원 아파트 매매·전세가격지수의'
+    ' **시간에 따른 추세(시계열)**를 완벽한 시계열 정렬로 비교합니다.'
 )
 
 
@@ -217,6 +218,27 @@ try:
       c.replace('_매매지수', '') for c in df_all.columns if '_매매지수' in c
   ]
 
+  # 지역명을 영문 명칭으로 자동 변환하는 딕셔너리 (폰트 깨짐 방지 및 명확한 표기)
+  region_en_map = {
+      '서울': 'Seoul',
+      '부산': 'Busan',
+      '대구': 'Daegu',
+      '인천': 'Incheon',
+      '광주': 'Gwangju',
+      '대전': 'Daejeon',
+      '울산': 'Ulsan',
+      '세종': 'Sejong',
+      '경기': 'Gyeonggi',
+      '강원': 'Gangwon',
+      '충북': 'Chungbuk',
+      '충남': 'Chungnam',
+      '전북': 'Jeonbuk',
+      '전남': 'Jeonnam',
+      '경북': 'Gyeongbuk',
+      '경남': 'Gyeongnam',
+      '제주': 'Jeju',
+  }
+
   st.sidebar.subheader('📅 조회 기간 선택')
   min_dt = df_all['date'].min().date()
   max_dt = df_all['date'].max().date()
@@ -247,7 +269,7 @@ try:
         '⚠️ 선택하신 기간에 해당하는 데이터가 부족하거나 존재하지 않습니다.'
     )
   else:
-    # 1. 첫 번째 시계열 통합 차트 (폰트 깨짐 방지를 위해 범례 영문 표기)
+    # 1. 시계열 통합 차트 (각 지역 이름을 영문 명칭으로 범례에 명시)
     st.markdown('---')
     st.header(
         '📈 [시계열 통합 차트] X축: 연도 (Datetime) | M2 통화량 및 전체 지역'
@@ -291,13 +313,14 @@ try:
       col_m = f'{reg}_매매지수'
       if col_m in analysis_df.columns:
         y_reg = pd.to_numeric(analysis_df[col_m], errors='coerce').values
-        # 지역명을 영문 코드 형태로 안전하게 표기하여 폰트 깨짐 원천 차단
+        # 지역명 매핑 (없으면 원래 이름 사용)
+        reg_label = region_en_map.get(reg, reg)
         ax2.plot(
             x_dates,
             y_reg,
             linewidth=2,
             color=colors[idx % len(colors)],
-            label=f'Region {idx+1} Index',
+            label=f'{reg_label} Sale Index',
         )
 
     ax2.set_ylabel(
@@ -366,7 +389,7 @@ try:
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
 
-    # 3. 두 번째 시뮬레이션 그래프 (X축: 연도, 폰트 깨짐 방지 적용 완료)
+    # 3. X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프
     st.markdown(
         '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | 실제 매매지수 추세 & 슬라이더'
         ' 예측값 비교'
@@ -380,12 +403,13 @@ try:
     fig_sim, ax_sim = plt.subplots(figsize=(14, 5))
 
     actual_y = pd.to_numeric(reg_df[m_col], errors='coerce').values
+    sel_en = region_en_map.get(selected_region, selected_region)
     ax_sim.plot(
         reg_df['date'],
         actual_y,
         color='tab:blue',
         linewidth=2,
-        label='Historical Sale Index',
+        label=f'Historical {sel_en} Sale Index',
     )
 
     ax_sim.axhline(
@@ -407,7 +431,7 @@ try:
     ax_sim.legend(loc='upper left', fontsize=10)
 
     plt.title(
-        'Time-Series Prediction Simulation (X-axis: Year)',
+        f'Time-Series Prediction Simulation for {sel_en} (X-axis: Year)',
         fontsize=14,
         fontweight='bold',
         pad=15,
