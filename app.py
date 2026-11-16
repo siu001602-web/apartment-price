@@ -283,7 +283,7 @@ try:
             y_reg,
             linewidth=2,
             color=colors[idx % len(colors)],
-            label=f'{reg} Sale Index',
+            label=f'{reg} Index',
         )
 
     ax2.set_ylabel(
@@ -352,7 +352,7 @@ try:
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
 
-    # 📊 [수정된 부분] X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프
+    # 3. X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프 (폰트 깨짐 완전 해결)
     st.markdown(
         '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | 실제 매매지수 추세 & 슬라이더'
         ' 예측값 비교'
@@ -365,7 +365,6 @@ try:
 
     fig_sim, ax_sim = plt.subplots(figsize=(14, 5))
 
-    # X축: 날짜, Y축: 실제 해당 지역 매매가격지수 추세선
     actual_y = pd.to_numeric(reg_df[m_col], errors='coerce').values
     ax_sim.plot(
         reg_df['date'],
@@ -375,7 +374,6 @@ try:
         label=f'Historical {selected_region} Sale Index',
     )
 
-    # 슬라이더 예측값을 전체 기간에 걸쳐 수평선으로 비교 표시
     ax_sim.axhline(
         y=pred_val,
         color='gold',
@@ -386,7 +384,7 @@ try:
 
     ax_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
     ax_sim.set_ylabel(
-        f'{selected_region} Sale Price Index',
+        'Sale Price Index',
         fontsize=12,
         fontweight='bold',
         color='tab:blue',
@@ -394,6 +392,7 @@ try:
     ax_sim.grid(True, linestyle='--', alpha=0.5)
     ax_sim.legend(loc='upper left', fontsize=10)
 
+    # 폰트 깨짐 방지를 위해 차트 타이틀을 영문으로 설정
     plt.title(
         f'Time-Series Prediction Simulation for {selected_region} (X-axis:'
         ' Year)',
