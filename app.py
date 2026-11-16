@@ -1,18 +1,17 @@
 from datetime import datetime
 import os
-import matplotlib.pyplot as plt
+import platform
+import warnings
 import matplotlib.font_manager as fm
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 import streamlit as st
-import warnings
 
 warnings.filterwarnings('ignore')
 
 # --- 폰트 및 마이너스 기호 깨짐 방지 설정 ---
-import platform
-
 system_name = platform.system()
 if system_name == 'Windows':
   plt.rc('font', family='Malgun Gothic')
@@ -188,7 +187,7 @@ def load_all_data():
           how='outer',
       )
       final_merged = pd.merge(money_df, apt_combined, on='date', how='inner')
-    except Exception as e:
+    except Exception:
       final_merged = apt_combined.copy()
       final_merged['M1_금액'] = [
           1000000 + i * 5000 for i in range(len(final_merged))
@@ -307,6 +306,8 @@ try:
         'tab:purple',
         'tab:brown',
         'tab:pink',
+        'tab:cyan',
+        'tab:olive',
     ]
     for idx, reg in enumerate(regions):
       col_m = f'{reg}_매매지수'
@@ -349,123 +350,169 @@ try:
     fig_ts.tight_layout()
     st.pyplot(fig_ts)
 
-    # 2. 회귀 분석 및 예측 시뮬레이션 섹션
+    # 2. [기능 추가 #2] 다중 지역 비교 선형회귀 및 예측 시뮬레이션
     st.markdown('---')
-    st.subheader('🤖 M2 통화량 기반 선형회귀 및 예측 시뮬레이션')
-    selected_region = st.selectbox(
-        '회귀분석 대상 지역 선택', regions, index=0
+    st.subheader('🤖 M2 통화량 기반 다중 지역 선형회귀 및 예측 시뮬레이션')
+
+    default_regions = regions[:2] if len(regions) >= 2 else regions
+    selected_regions = st.multiselect(
+        '비교할 회귀분석 대상 지역 선택 (복수 선택 가능)',
+        options=regions,
+        default=default_regions,
     )
 
-    m_col = f'{selected_region}_매매지수'
-    reg_df = analysis_df[['date', 'M2_금액', m_col]].dropna()
+    if not selected_regions:
+      st.warning('⚠️ 비교 분석을 위해 최소 1개 이상의 지역을 선택해주세요.')
+    else:
+      min_m2 = float(analysis_df['M2_금액'].min())
+      max_m2 = float(analysis_df['M2_금액'].max()) * 1.4
 
-    X = reg_df[['M2_금액']].values
-    y = reg_df[m_col].values
+      future_m2 = st.slider(
+          '🔮 미래 예상 M2 통화량 입력 (십억원)',
+          min_value=min_m2,
+          max_value=max_m2,
+          value=float(analysis_df['M2_금액'].max()),
+          step=10000.0,
+      )
 
-    model = LinearRegression()
-    model.fit(X, y)
-    r2 = model.score(X, y)
+      # 선택된 각 지역별로 회귀 모델 학습 및 결과 정리
+      sim_results = []
+      fig_sim, ax1_sim = plt.subplots(figsize=(14, 6))
 
-    st.info(
-        f'📌 **[{selected_region}] 회귀 모델 결정계수(R²): {r2:.4f}**'
-    )
+      # 좌측 Y축: M2 통화량 추세선
+      ax1_sim.plot(
+          analysis_df['date'].values,
+          analysis_df['M2_금액'].values,
+          color='black',
+          linewidth=2.5,
+          linestyle='--',
+          label='M2 Money Supply',
+          zorder=3,
+      )
+      ax1_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
+      ax1_sim.set_ylabel(
+          'M2 Supply (Billion KRW)',
+          color='black',
+          fontsize=12,
+          fontweight='bold',
+      )
+      ax1_sim.tick_params(axis='y', labelcolor='black')
 
-    min_m2 = float(reg_df['M2_금액'].min())
-    max_m2 = float(reg_df['M2_금액'].max()) * 1.4
+      # 우측 Y축: 선택된 다중 지역의 실제 추세 및 슬라이더 예측 수평선
+      ax2_sim = ax1_sim.twinx()
 
-    future_m2 = st.slider(
-        '🔮 미래 예상 M2 통화량 입력 (십억원)',
-        min_value=min_m2,
-        max_value=max_m2,
-        value=float(reg_df['M2_금액'].max()),
-        step=10000.0,
-    )
+      for idx, reg in enumerate(selected_regions):
+        m_col = f'{reg}_매매지수'
+        reg_df = analysis_df[['date', 'M2_금액', m_col]].dropna()
 
-    pred_val = model.predict([[future_m2]])[0]
-    st.success(
-        f'✨ 예상 M2 통화량 **{future_m2:,.0f} 십억원**일 때, 추정되는'
-        f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
-    )
+        if len(reg_df) < 2:
+          continue
 
-    # 3. [수정 완료] 두 번째 시뮬레이션 그래프 (듀얼 축 적용: 좌측 M2 통화량, 우측 매매지수 & 슬라이더 예측값)
-    st.markdown(
-        '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | M2 통화량 추세 & 실제'
-        ' 매매지수 및 슬라이더 예측값 비교'
-    )
-    st.markdown(
-        '시간(연도) 흐름에 따른 **M2 통화량(좌측 축)**과 **실제 매매지수 및 슬라이더'
-        ' 예상값(우측 축)**을 함께 비교하여 시각화합니다.'
-    )
+        X = reg_df[['M2_금액']].values
+        y = pd.to_numeric(reg_df[m_col], errors='coerce').values
 
-    fig_sim, ax1_sim = plt.subplots(figsize=(14, 6))
+        model = LinearRegression()
+        model.fit(X, y)
+        r2 = model.score(X, y)
+        pred_val = model.predict([[future_m2]])[0]
+        latest_val = y[-1]
+        diff_pct = ((pred_val - latest_val) / latest_val) * 100
 
-    x_sim_dates = reg_df['date'].values
-    y_sim_m2 = reg_df['M2_금액'].values
-    actual_y = pd.to_numeric(reg_df[m_col], errors='coerce').values
-    sel_en = region_en_map.get(selected_region, selected_region)
+        sim_results.append({
+            '지역': reg,
+            '결정계수(R²)': round(r2, 4),
+            '최근 실제 지수': round(latest_val, 2),
+            '입력 M2(십억원)': round(future_m2, 0),
+            '예상 매매지수': round(pred_val, 2),
+            '최근 대비 증감률(%)': round(diff_pct, 2),
+        })
 
-    # 좌측 Y축: M2 통화량 추세선
-    ax1_sim.plot(
-        x_sim_dates,
-        y_sim_m2,
-        color='black',
-        linewidth=2.5,
-        linestyle='--',
-        label='M2 Money Supply',
-        zorder=3,
-    )
-    ax1_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
-    ax1_sim.set_ylabel(
-        'M2 Supply (Billion KRW)', color='black', fontsize=12, fontweight='bold'
-    )
-    ax1_sim.tick_params(axis='y', labelcolor='black')
+        line_color = colors[idx % len(colors)]
+        reg_en = region_en_map.get(reg, reg)
 
-    # 우측 Y축: 실제 매매지수 및 슬라이더 예측값 수평선
-    ax2_sim = ax1_sim.twinx()
-    ax2_sim.plot(
-        x_sim_dates,
-        actual_y,
-        color='tab:blue',
-        linewidth=2,
-        label=f'Historical {sel_en} Sale Index',
-    )
+        # 실제 지수 실선
+        ax2_sim.plot(
+            reg_df['date'].values,
+            y,
+            color=line_color,
+            linewidth=2,
+            label=f'{reg_en} Historical',
+        )
+        # 슬라이더 예측값 수평 점선
+        ax2_sim.axhline(
+            y=pred_val,
+            color=line_color,
+            linestyle=':',
+            linewidth=2.2,
+            label=f'{reg_en} Predicted ({pred_val:.1f})',
+        )
 
-    ax2_sim.axhline(
-        y=pred_val,
-        color='gold',
-        linestyle='--',
-        linewidth=2.5,
-        label=f'Slider Predicted Index ({pred_val:.2f}) at M2 {future_m2:,.0f}',
-    )
+      ax2_sim.set_ylabel(
+          'Regional Apt Sale Price Index',
+          color='tab:blue',
+          fontsize=12,
+          fontweight='bold',
+      )
+      ax2_sim.tick_params(axis='y', labelcolor='tab:blue')
 
-    ax2_sim.set_ylabel(
-        f'{sel_en} Sale Price Index',
-        color='tab:blue',
-        fontsize=12,
-        fontweight='bold',
-    )
-    ax2_sim.tick_params(axis='y', labelcolor='tab:blue')
+      lines_1, labels_1 = ax1_sim.get_legend_handles_labels()
+      lines_2, labels_2 = ax2_sim.get_legend_handles_labels()
+      ax1_sim.legend(
+          lines_1 + lines_2,
+          labels_1 + labels_2,
+          loc='upper left',
+          fontsize=9.5,
+          framealpha=0.85,
+          ncol=2,
+      )
 
-    # 범례 통합 표시
-    lines_1, labels_1 = ax1_sim.get_legend_handles_labels()
-    lines_2, labels_2 = ax2_sim.get_legend_handles_labels()
-    ax1_sim.legend(
-        lines_1 + lines_2,
-        labels_1 + labels_2,
-        loc='upper left',
-        fontsize=10,
-        framealpha=0.8,
-    )
+      plt.title(
+          'Multi-Region Time-Series Simulation (Dual Axis: M2 vs Price Index)',
+          fontsize=14,
+          fontweight='bold',
+          pad=15,
+      )
+      fig_sim.tight_layout()
 
-    plt.title(
-        f'Time-Series Prediction Simulation for {sel_en} (Dual Axis: M2 vs'
-        ' Price Index)',
-        fontsize=14,
-        fontweight='bold',
-        pad=15,
-    )
-    fig_sim.tight_layout()
-    st.pyplot(fig_sim)
+      # 지역별 예측 요약 테이블 출력
+      res_df = pd.DataFrame(sim_results)
+      st.dataframe(res_df, use_container_width=True, hide_index=True)
+
+      st.markdown(
+          '#### 📈 [다중 지역 시계열 예측 시뮬레이션] 실선: 과거 실제 추세 |'
+          ' 점선: 슬라이더 M2 기준 예상 지수'
+      )
+      st.pyplot(fig_sim)
+
+      # 3. [기능 추가 #4] CSV 리포트 다운로드 섹션
+      st.markdown('---')
+      st.subheader('📥 분석 데이터 및 시뮬레이션 리포트 다운로드')
+
+      col_dl1, col_dl2 = st.columns(2)
+
+      with col_dl1:
+        sim_csv = res_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label='📊 시뮬레이션 예측 요약표 다운로드 (CSV)',
+            data=sim_csv,
+            file_name=(
+                f'M2_예측시뮬레이션_결과_{datetime.now().strftime("%Y%m%d")}.csv'
+            ),
+            mime='text/csv',
+        )
+
+      with col_dl2:
+        export_df = analysis_df.copy()
+        export_df['date'] = export_df['date'].dt.strftime('%Y-%m-%d')
+        raw_csv = export_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label='📁 선택 기간 시계열 통합 원본 데이터 다운로드 (CSV)',
+            data=raw_csv,
+            file_name=(
+                f'시계열_통합데이터_{start_date_input}_{end_date_input}.csv'
+            ),
+            mime='text/csv',
+        )
 
 except Exception as e:
   st.error(f'데이터 처리 중 오류가 발생했습니다: {e}')
