@@ -218,7 +218,6 @@ try:
       c.replace('_매매지수', '') for c in df_all.columns if '_매매지수' in c
   ]
 
-  # 지역명을 영문 명칭으로 자동 변환하는 딕셔너리 (폰트 깨짐 방지 및 명확한 표기)
   region_en_map = {
       '서울': 'Seoul',
       '부산': 'Busan',
@@ -269,7 +268,7 @@ try:
         '⚠️ 선택하신 기간에 해당하는 데이터가 부족하거나 존재하지 않습니다.'
     )
   else:
-    # 1. 시계열 통합 차트 (각 지역 이름을 영문 명칭으로 범례에 명시)
+    # 1. 첫 번째 시계열 통합 차트
     st.markdown('---')
     st.header(
         '📈 [시계열 통합 차트] X축: 연도 (Datetime) | M2 통화량 및 전체 지역'
@@ -313,7 +312,6 @@ try:
       col_m = f'{reg}_매매지수'
       if col_m in analysis_df.columns:
         y_reg = pd.to_numeric(analysis_df[col_m], errors='coerce').values
-        # 지역명 매핑 (없으면 원래 이름 사용)
         reg_label = region_en_map.get(reg, reg)
         ax2.plot(
             x_dates,
@@ -389,30 +387,50 @@ try:
         f' **{selected_region}** 아파트 매매가격지수는 **{pred_val:,.2f}** 입니다.'
     )
 
-    # 3. X축을 '년도(Date)'로 두고 실제 지수 추세와 슬라이더 예측값을 비교하는 시계열 시뮬레이션 그래프
+    # 3. [수정 완료] 두 번째 시뮬레이션 그래프 (듀얼 축 적용: 좌측 M2 통화량, 우측 매매지수 & 슬라이더 예측값)
     st.markdown(
-        '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | 실제 매매지수 추세 & 슬라이더'
-        ' 예측값 비교'
+        '#### 📈 [시계열 예측 시뮬레이션] X축: 연도(Date) | M2 통화량 추세 & 실제'
+        ' 매매지수 및 슬라이더 예측값 비교'
     )
     st.markdown(
-        '슬라이더로 입력한 M2 통화량을 회귀식에 대입했을 때 도출되는 **예상'
-        ' 아파트 가격지수(수평선)**가 시간(연도) 흐름 속에서 과거 실제 가격'
-        ' 추세와 비교해 어느 정도 수준인지 시각화합니다.'
+        '시간(연도) 흐름에 따른 **M2 통화량(좌측 축)**과 **실제 매매지수 및 슬라이더'
+        ' 예상값(우측 축)**을 함께 비교하여 시각화합니다.'
     )
 
-    fig_sim, ax_sim = plt.subplots(figsize=(14, 5))
+    fig_sim, ax1_sim = plt.subplots(figsize=(14, 6))
 
+    x_sim_dates = reg_df['date'].values
+    y_sim_m2 = reg_df['M2_금액'].values
     actual_y = pd.to_numeric(reg_df[m_col], errors='coerce').values
     sel_en = region_en_map.get(selected_region, selected_region)
-    ax_sim.plot(
-        reg_df['date'],
+
+    # 좌측 Y축: M2 통화량 추세선
+    ax1_sim.plot(
+        x_sim_dates,
+        y_sim_m2,
+        color='black',
+        linewidth=2.5,
+        linestyle='--',
+        label='M2 Money Supply',
+        zorder=3,
+    )
+    ax1_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
+    ax1_sim.set_ylabel(
+        'M2 Supply (Billion KRW)', color='black', fontsize=12, fontweight='bold'
+    )
+    ax1_sim.tick_params(axis='y', labelcolor='black')
+
+    # 우측 Y축: 실제 매매지수 및 슬라이더 예측값 수평선
+    ax2_sim = ax1_sim.twinx()
+    ax2_sim.plot(
+        x_sim_dates,
         actual_y,
         color='tab:blue',
         linewidth=2,
         label=f'Historical {sel_en} Sale Index',
     )
 
-    ax_sim.axhline(
+    ax2_sim.axhline(
         y=pred_val,
         color='gold',
         linestyle='--',
@@ -420,18 +438,28 @@ try:
         label=f'Slider Predicted Index ({pred_val:.2f}) at M2 {future_m2:,.0f}',
     )
 
-    ax_sim.set_xlabel('Year (Date)', fontsize=12, fontweight='bold')
-    ax_sim.set_ylabel(
-        'Sale Price Index',
+    ax2_sim.set_ylabel(
+        f'{sel_en} Sale Price Index',
+        color='tab:blue',
         fontsize=12,
         fontweight='bold',
-        color='tab:blue',
     )
-    ax_sim.grid(True, linestyle='--', alpha=0.5)
-    ax_sim.legend(loc='upper left', fontsize=10)
+    ax2_sim.tick_params(axis='y', labelcolor='tab:blue')
+
+    # 범례 통합 표시
+    lines_1, labels_1 = ax1_sim.get_legend_handles_labels()
+    lines_2, labels_2 = ax2_sim.get_legend_handles_labels()
+    ax1_sim.legend(
+        lines_1 + lines_2,
+        labels_1 + labels_2,
+        loc='upper left',
+        fontsize=10,
+        framealpha=0.8,
+    )
 
     plt.title(
-        f'Time-Series Prediction Simulation for {sel_en} (X-axis: Year)',
+        f'Time-Series Prediction Simulation for {sel_en} (Dual Axis: M2 vs'
+        ' Price Index)',
         fontsize=14,
         fontweight='bold',
         pad=15,
